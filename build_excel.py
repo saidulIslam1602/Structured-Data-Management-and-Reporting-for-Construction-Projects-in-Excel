@@ -1204,6 +1204,476 @@ def build_instructions(wb):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# POWER BI EXPORT — flat denormalised table for direct Power BI import
+# ══════════════════════════════════════════════════════════════════════════════
+def build_powerbi_export(wb):
+    """
+    Single flat table combining all tracker data in one place.
+    Import into Power BI via: Get Data → Excel Workbook → select tblPowerBI_Export.
+    Columns are typed and named for direct use as a Power BI data source.
+    """
+    ws = wb.create_sheet("Power BI Export")
+    ws.sheet_properties.tabColor = BODY
+
+    # ── Title block ────────────────────────────────────────────────────────
+    title_block(ws, "POWER BI EXPORT", "A1:R1")
+    ws.merge_cells("A2:R2")
+    sub = ws["A2"]
+    sub.value = (
+        "Flat denormalised dataset — import into Power BI via  Get Data → Excel Workbook → tblPowerBI_Export"
+    )
+    sub.font = Fn(color=MUTED, size=9, italic=True)
+    sub.fill = F(SURF)
+    sub.alignment = AL(h="left", indent=2)
+
+    # ── Column definitions ──────────────────────────────────────────────────
+    headers = [
+        "Source_Sheet", "Record_ID", "Discipline", "Responsible_Lead",
+        "Activity_Description", "Status", "Priority_Level",
+        "Planned_Pct", "Actual_Pct", "Variance_Pct",
+        "Planned_Start", "Planned_Finish", "Due_Date", "Date_Raised",
+        "Risk_Score", "Risk_Level",
+        "Days_Overdue", "Month_Period",
+    ]
+    for c, h in enumerate(headers, 1):
+        cell = ws.cell(row=3, column=c)
+        cell.value = h
+        cell.fill = F(DARK)
+        cell.font = Fn(color=WHITE, bold=True, size=9)
+        cell.border = thin_border()
+        cell.alignment = AL(h="center")
+
+    ws.row_dimensions[3].height = 22
+    ws.freeze_panes = "A4"
+
+    # ── Weekly Progress rows (18 rows → pull via formula) ──────────────────
+    disciplines = ["Civil","Structural","Electrical","Mechanical","Piping",
+                   "Instrumentation","HVAC","Scaffolding"]
+    activities = [
+        ("Civil","Earthworks & Site Levelling"),("Civil","Foundation Piling"),
+        ("Civil","Drainage & Culverts"),("Structural","Steel Frame Erection"),
+        ("Structural","Secondary Steelwork"),("Structural","Bolting & Torquing"),
+        ("Electrical","Main HV Cabling"),("Electrical","LV Distribution Boards"),
+        ("Electrical","Earthing & Lightning Protection"),
+        ("Mechanical","Equipment Setting & Alignment"),("Mechanical","Piping Spools Fit-Up"),
+        ("Piping","Main Process Lines"),("Piping","Utility Lines"),
+        ("Instrumentation","Field Instruments Install"),("Instrumentation","Control Cable Pulling"),
+        ("HVAC","Ductwork Fabrication"),("HVAC","AHU Installation"),
+        ("Scaffolding","Access Scaffold — Zone A"),
+    ]
+    statuses = ["Completed","On Track","Behind","Ahead","On Track","Completed",
+                "On Track","Behind","On Track","Ahead","On Track","On Track",
+                "Behind","On Track","Not Started","On Track","Ahead","Completed"]
+    planned  = [1.0,0.85,0.90,0.80,0.75,0.60,0.70,0.50,0.65,0.55,0.60,0.80,
+                0.40,0.30,0.00,0.60,0.45,1.0]
+    actual   = [1.0,0.88,0.85,0.83,0.70,0.65,0.72,0.42,0.65,0.60,0.62,0.78,
+                0.35,0.30,0.00,0.63,0.50,1.0]
+    leads    = {"Civil":"P. Hansen","Structural":"K. Berg","Electrical":"L. Andersen",
+                "Mechanical":"R. Johansen","Piping":"T. Eriksen",
+                "Instrumentation":"S. Larsen","HVAC":"M. Olsen","Scaffolding":"B. Dahl"}
+
+    row = 4
+    for i, ((disc, act), st, pl, ac) in enumerate(zip(activities, statuses, planned, actual)):
+        var = round(ac - pl, 4)
+        data = [
+            "Weekly Progress", f"WP-{i+1:02d}", disc, leads.get(disc,"—"),
+            act, st, "—",
+            pl, ac, var,
+            date(2026, 3, 1), date(2026, 5, 31), None, date(2026, 1, 6),
+            None, None, None, "Apr-26",
+        ]
+        _fill_export_row(ws, row, data)
+        row += 1
+
+    # ── Risk Register rows (15 risks) ──────────────────────────────────────
+    risks = [
+        ("Civil","Ground Settlement — Soft Strata",5,5,"High"),
+        ("Civil","Excavation Collapse — Adjacent Services",4,5,"High"),
+        ("Structural","Material Delivery Delay — Structural Steel",3,4,"Medium"),
+        ("Structural","Crane Overload During Lift",2,5,"Medium"),
+        ("Electrical","HV Cable Damage During Excavation",4,4,"High"),
+        ("Electrical","Switchgear Procurement Lead Time",3,3,"Medium"),
+        ("Mechanical","Equipment Alignment Tolerance Exceeded",2,4,"Medium"),
+        ("Piping","Pressure Test Failure — Flange Leak",3,4,"Medium"),
+        ("Piping","Wrong Material Delivered — Grade Mismatch",2,3,"Low"),
+        ("Instrumentation","Calibration Drift — Pressure Transmitters",2,3,"Low"),
+        ("HVAC","Ductwork Fabrication Error",2,2,"Low"),
+        ("Scaffolding","Scaffold Overloading",3,5,"High"),
+        ("Civil","Environmental Runoff — Site Drainage",3,3,"Medium"),
+        ("Electrical","Electrical Isolation Procedure Breach",4,5,"High"),
+        ("Structural","Weld Inspection Failure — NDT",3,4,"Medium"),
+    ]
+    for i, (disc, desc, prob, impact, level) in enumerate(risks):
+        score = prob * impact
+        data = [
+            "Risk Register", f"RR-{i+1:02d}", disc, leads.get(disc,"—"),
+            desc, "Open", "High" if level=="High" else "Medium",
+            None, None, None,
+            None, None, date(2026, 5, 15), date(2026, 2, 15),
+            score, level, None, "—",
+        ]
+        _fill_export_row(ws, row, data)
+        row += 1
+
+    # ── Action Item Log rows (17 actions) ──────────────────────────────────
+    actions = [
+        ("Civil","Submit updated ITP to QA Manager","Closed",0,date(2026,1,8),date(2026,1,22)),
+        ("Civil","Complete pre-pour checklist — Footing A","Closed",0,date(2026,1,15),date(2026,1,28)),
+        ("Structural","Resolve NCR-003 bolt torque issue","In Progress",0.7,date(2026,2,1),date(2026,2,20)),
+        ("Structural","Update as-built drawings — Grid C","Open",0,date(2026,2,10),date(2026,3,5)),
+        ("Electrical","Submit HV cable routing revision","In Progress",0.5,date(2026,2,14),date(2026,3,1)),
+        ("Electrical","Thermographic survey — DB01 & DB02","Open",0,date(2026,2,20),date(2026,3,15)),
+        ("Mechanical","Pump alignment report — sign off","Closed",1.0,date(2026,1,20),date(2026,2,5)),
+        ("Mechanical","Torque log update — all flanges","In Progress",0.6,date(2026,2,5),date(2026,3,10)),
+        ("Piping","Pressure test schedule — submit to client","Open",0,date(2026,2,18),date(2026,3,20)),
+        ("Piping","Reinstate insulation — Line 12B","Open",0,date(2026,2,22),date(2026,3,25)),
+        ("Instrumentation","Calibration certs — transmitters T01–T08","In Progress",0.8,date(2026,1,25),date(2026,2,28)),
+        ("Instrumentation","Loop test documentation — Zone 2","Open",0,date(2026,2,28),date(2026,4,1)),
+        ("HVAC","Damper actuator commissioning test","Open",0,date(2026,3,1),date(2026,4,10)),
+        ("HVAC","Duct leak test — AHU-01 zone","Open",0,date(2026,3,5),date(2026,4,15)),
+        ("Scaffolding","Weekly scaffold inspection log","In Progress",0.5,date(2026,2,8),date(2026,5,1)),
+        ("Civil","Weekly site diary update — all disciplines","In Progress",0.4,date(2026,2,15),date(2026,5,8)),
+        ("Structural","Close out punch list — Zone B steelwork","Open",0.1,date(2026,3,10),date(2026,4,30)),
+    ]
+    for i, (disc, desc, st, pct, raised, due) in enumerate(actions):
+        overdue = max(0, (date(2026, 5, 4) - due).days) if st != "Closed" and date(2026,5,4) > due else 0
+        data = [
+            "Action Item Log", f"AI-{i+1:02d}", disc, leads.get(disc,"—"),
+            desc, st, "Medium",
+            None, pct, None,
+            None, None, due, raised,
+            None, None, overdue if overdue > 0 else None, "—",
+        ]
+        _fill_export_row(ws, row, data)
+        row += 1
+
+    last_data_row = row - 1
+
+    # ── Format numeric/percentage columns ──────────────────────────────────
+    pct_cols = [8, 9, 10]   # Planned%, Actual%, Variance%
+    num_cols = [15, 17]     # Risk Score, Days Overdue
+    for r in range(4, last_data_row + 1):
+        for c in pct_cols:
+            ws.cell(row=r, column=c).number_format = "0%"
+        for c in num_cols:
+            ws.cell(row=r, column=c).number_format = "0"
+        for c in [11, 12, 13, 14]:
+            ws.cell(row=r, column=c).number_format = "DD-MMM-YY"
+
+    # ── Excel Table ─────────────────────────────────────────────────────────
+    tab = Table(displayName="tblPowerBI_Export", ref=f"A3:R{last_data_row}")
+    tab.tableStyleInfo = TableStyleInfo(
+        name="TableStyleMedium2",
+        showFirstColumn=False, showLastColumn=False,
+        showRowStripes=True,   showColumnStripes=False,
+    )
+    ws.add_table(tab)
+    ws.auto_filter.ref = f"A3:R{last_data_row}"
+
+    # ── Usage note rows ─────────────────────────────────────────────────────
+    note_row = last_data_row + 2
+    ws.merge_cells(f"A{note_row}:R{note_row}")
+    note = ws.cell(row=note_row, column=1)
+    note.value = (
+        "HOW TO IMPORT INTO POWER BI:  Home → Get Data → Excel Workbook → "
+        "select this file → check  tblPowerBI_Export  → Load   |   "
+        "Then build visuals using Source_Sheet as slicer, Discipline as axis, "
+        "Status/Risk_Level as legend."
+    )
+    note.fill = F(ACC_LT)
+    note.font = Fn(color=ACC_DK, size=8, italic=True)
+    note.alignment = AL(h="left", wrap=True, indent=2)
+    ws.row_dimensions[note_row].height = 28
+
+    set_widths(ws, {
+        "A": 16, "B": 10, "C": 16, "D": 18, "E": 38, "F": 14, "G": 12,
+        "H": 10, "I": 10, "J": 10, "K": 12, "L": 12, "M": 12, "N": 12,
+        "O": 10, "P": 10, "Q": 12, "R": 10,
+    })
+    ws.print_title_rows = "3:3"
+
+
+def _fill_export_row(ws, row, data):
+    """Write one data row to the Power BI Export sheet with alternating fills."""
+    fill_color = SURF if row % 2 == 0 else WHITE
+    for c, val in enumerate(data, 1):
+        cell = ws.cell(row=row, column=c)
+        cell.value = val
+        cell.fill = F(fill_color)
+        cell.font = Fn(color=TEXT, size=9)
+        cell.border = thin_border()
+        cell.alignment = AL(h="left", indent=1)
+    ws.row_dimensions[row].height = 18
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# WEEKLY SUBMISSION TRACKER — which disciplines submitted their weekly data
+# ══════════════════════════════════════════════════════════════════════════════
+def build_submission_tracker(wb):
+    """
+    Shows at a glance which disciplines have submitted their weekly data.
+    Coordinator marks each cell as Submitted / Pending / Not Required.
+    Conditional formatting highlights missing submissions in amber.
+    """
+    ws = wb.create_sheet("Submission Tracker")
+    ws.sheet_properties.tabColor = DARK
+
+    title_block(ws, "WEEKLY SUBMISSION TRACKER", "A1:L1")
+
+    # Sub-header
+    ws.merge_cells("A2:L2")
+    sub = ws["A2"]
+    sub.value = (
+        "Track which disciplines have submitted their weekly progress data  —  "
+        "update each Monday by 09:00.  Amber = Pending.  Red = Overdue (not submitted by deadline)."
+    )
+    sub.font = Fn(color=MUTED, size=9, italic=True)
+    sub.fill = F(SURF); sub.alignment = AL(h="left", indent=2)
+
+    # ── Column headers row ─────────────────────────────────────────────────
+    weeks = ["Wk 15\n14-Apr", "Wk 16\n21-Apr", "Wk 17\n28-Apr",
+             "Wk 18\n05-May", "Wk 19\n12-May", "Wk 20\n19-May",
+             "Wk 21\n26-May", "Wk 22\n02-Jun", "Wk 23\n09-Jun", "Wk 24\n16-Jun"]
+    hdr_labels = ["Discipline"] + weeks + ["Submissions\nComplete"]
+    for c, lbl in enumerate(hdr_labels, 1):
+        cell = ws.cell(row=3, column=c)
+        cell.value = lbl
+        cell.fill = F(DARK)
+        cell.font = Fn(color=WHITE, bold=True, size=9)
+        cell.border = thin_border()
+        cell.alignment = AL(h="center", wrap=True)
+    ws.row_dimensions[3].height = 32
+    ws.freeze_panes = "B4"
+
+    # ── Data rows ──────────────────────────────────────────────────────────
+    disciplines = ["Civil","Structural","Electrical","Mechanical",
+                   "Piping","Instrumentation","HVAC","Scaffolding"]
+
+    # Pre-filled historical status (weeks 15-17 = done, week 18 in progress)
+    status_map = {
+        "Civil":           ["Submitted","Submitted","Submitted","Submitted","Pending","Pending","Pending","Pending","Pending","Pending"],
+        "Structural":      ["Submitted","Submitted","Submitted","Submitted","Pending","Pending","Pending","Pending","Pending","Pending"],
+        "Electrical":      ["Submitted","Submitted","Submitted","Pending", "Pending","Pending","Pending","Pending","Pending","Pending"],
+        "Mechanical":      ["Submitted","Submitted","Submitted","Submitted","Pending","Pending","Pending","Pending","Pending","Pending"],
+        "Piping":          ["Submitted","Submitted","Pending",  "Pending", "Pending","Pending","Pending","Pending","Pending","Pending"],
+        "Instrumentation": ["Submitted","Submitted","Submitted","Pending", "Pending","Pending","Pending","Pending","Pending","Pending"],
+        "HVAC":            ["Submitted","Submitted","Submitted","Submitted","Pending","Pending","Pending","Pending","Pending","Pending"],
+        "Scaffolding":     ["Submitted","Submitted","Submitted","Pending", "Pending","Pending","Pending","Pending","Pending","Pending"],
+    }
+
+    for r_idx, disc in enumerate(disciplines):
+        row = 4 + r_idx
+        # Discipline name
+        dn = ws.cell(row=row, column=1)
+        dn.value = disc
+        dn.fill = F(SURF if r_idx % 2 == 0 else WHITE)
+        dn.font = Fn(color=TEXT, bold=True, size=10)
+        dn.border = thin_border()
+        dn.alignment = AL(h="left", indent=2)
+
+        submitted_count = 0
+        for col_idx, st in enumerate(status_map[disc], 2):
+            cell = ws.cell(row=row, column=col_idx)
+            cell.value = st
+            cell.border = thin_border()
+            cell.alignment = AL(h="center")
+            if st == "Submitted":
+                bg, fg = B_GREEN
+                submitted_count += 1
+            else:
+                bg, fg = B_AMBER
+            cell.fill = F(bg)
+            cell.font = Fn(color=fg, size=9, bold=False)
+
+        # Summary count formula: count "Submitted" across B:K
+        col_letters = [get_column_letter(c) for c in range(2, 12)]
+        sumcol = ws.cell(row=row, column=12)
+        sumcol.value = f'=COUNTIF(B{row}:K{row},"Submitted")&"/10"'
+        sumcol.fill = F(SURF if r_idx % 2 == 0 else WHITE)
+        sumcol.font = Fn(color=TEXT, bold=True, size=10)
+        sumcol.border = thin_border()
+        sumcol.alignment = AL(h="center")
+        ws.row_dimensions[row].height = 22
+
+    # ── Submission deadline reminder row ───────────────────────────────────
+    reminder_row = 13
+    ws.merge_cells(f"A{reminder_row}:L{reminder_row}")
+    rem = ws.cell(row=reminder_row, column=1)
+    rem.value = "Deadline: Every Monday 09:00 local time  |  Contact discipline lead directly if not submitted by 10:00"
+    rem.fill = F(ACC_LT); rem.font = Fn(color=ACC_DK, size=9, italic=True)
+    rem.alignment = AL(h="left", indent=2)
+    ws.row_dimensions[reminder_row].height = 22
+
+    # ── Data validation on status cells ────────────────────────────────────
+    dv_status = DataValidation(
+        type="list",
+        formula1='"Submitted,Pending,Not Required,Overdue"',
+        allow_blank=False, showDropDown=False,
+        showInputMessage=True, promptTitle="Submission Status",
+        prompt="Submitted = data received\nPending = not yet received\nNot Required = discipline not active this week\nOverdue = deadline passed",
+        showErrorMessage=True, errorTitle="Invalid Status",
+        error="Choose: Submitted | Pending | Not Required | Overdue"
+    )
+    ws.add_data_validation(dv_status)
+    dv_status.sqref = "B4:K11"
+
+    set_widths(ws, {"A": 18, "B": 11, "C": 11, "D": 11, "E": 11,
+                    "F": 11, "G": 11, "H": 11, "I": 11, "J": 11,
+                    "K": 11, "L": 14})
+
+    # Excel Table
+    tab = Table(displayName="tblSubmissionTracker", ref="A3:L11")
+    tab.tableStyleInfo = TableStyleInfo(
+        name="TableStyleLight1",
+        showFirstColumn=False, showLastColumn=False,
+        showRowStripes=False, showColumnStripes=False,
+    )
+    ws.add_table(tab)
+    ws.print_title_rows = "3:3"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# COORDINATION MEETING LOG — meeting minutes, decisions, action links
+# ══════════════════════════════════════════════════════════════════════════════
+def build_meeting_log(wb):
+    """
+    Captures coordination meeting details: date, attendees, agenda, decisions,
+    and links actions raised to the Action Item Log by ID.
+    """
+    ws = wb.create_sheet("Meeting Log")
+    ws.sheet_properties.tabColor = DARK
+
+    title_block(ws, "COORDINATION MEETING LOG", "A1:J1")
+
+    ws.merge_cells("A2:J2")
+    sub = ws["A2"]
+    sub.value = (
+        "Record every coordination meeting  —  date, attendees, agenda items, decisions made, "
+        "and action items raised.  Link action IDs to the Action Item Log."
+    )
+    sub.font = Fn(color=MUTED, size=9, italic=True)
+    sub.fill = F(SURF); sub.alignment = AL(h="left", indent=2)
+
+    # ── Column headers ──────────────────────────────────────────────────────
+    cols = [
+        "Mtg #", "Date", "Meeting Type", "Chairperson",
+        "Attendees (Disciplines)", "Agenda Item",
+        "Discussion Summary", "Decision / Resolution",
+        "Action IDs Raised", "Next Meeting Date",
+    ]
+    for c, lbl in enumerate(cols, 1):
+        cell = ws.cell(row=3, column=c)
+        cell.value = lbl
+        cell.fill = F(DARK)
+        cell.font = Fn(color=WHITE, bold=True, size=9)
+        cell.border = thin_border()
+        cell.alignment = AL(h="center", wrap=True)
+    ws.row_dimensions[3].height = 28
+    ws.freeze_panes = "A4"
+
+    # ── Sample meeting data ─────────────────────────────────────────────────
+    meetings = [
+        ("M-01", date(2026,1,12), "Weekly Site Coordination", "Site Manager",
+         "Civil, Structural, Electrical, Mechanical",
+         "Progress review Wk 02",
+         "Civil 85% complete on earthworks. Structural material delivery confirmed for 20-Jan.",
+         "Proceed with foundation pour on 15-Jan pending QA sign-off.",
+         "AI-01, AI-02", date(2026,1,19)),
+        ("M-02", date(2026,1,19), "Weekly Site Coordination", "Site Manager",
+         "All disciplines",
+         "Progress review Wk 03 + NCR-001 close-out",
+         "NCR-001 closed. Electrical HV cabling 70% complete. Risk RR-05 escalated.",
+         "Electrical to submit HV route revision by 01-Feb. Safety walk scheduled 22-Jan.",
+         "AI-05", date(2026,1,26)),
+        ("M-03", date(2026,2,2), "Weekly Site Coordination", "Site Manager",
+         "Civil, Structural, Piping, Instrumentation",
+         "Progress review Wk 05 + schedule recovery",
+         "Piping behind by 5% due to spool delivery delay. Revised schedule presented.",
+         "Piping to recover 5% by Wk 08 through weekend work. Updated programme submitted.",
+         "AI-09, AI-10", date(2026,2,9)),
+        ("M-04", date(2026,2,16), "Monthly Project Review", "Project Manager",
+         "All disciplines + Client Representative",
+         "Feb progress vs baseline + EV summary",
+         "Overall SPI = 0.97. CPI = 1.02. Client satisfied with quality but flagged documentation gaps.",
+         "All disciplines to submit up-to-date as-builts by 28-Feb. Commissioning plan requested.",
+         "AI-04, AI-12", date(2026,3,2)),
+        ("M-05", date(2026,3,3), "Weekly Site Coordination", "Site Manager",
+         "All disciplines",
+         "Progress review Wk 10 + risk review",
+         "High risk RR-01 (ground settlement) mitigated with ground improvement works. RR-14 new.",
+         "RR-14 (electrical isolation breach) added to register. Safety stand-down 04-Mar.",
+         "AI-14", date(2026,3,9)),
+        ("M-06", date(2026,3,16), "Weekly Site Coordination", "Site Manager",
+         "Structural, HVAC, Scaffolding",
+         "Scaffold inspection + HVAC commissioning prep",
+         "Scaffold passed inspection. HVAC ductwork leak test scheduled for 20-Mar.",
+         "HVAC to complete leak test and submit result by 25-Mar.",
+         "AI-13, AI-14", date(2026,3,23)),
+        ("M-07", date(2026,4,7), "Weekly Site Coordination", "Site Manager",
+         "All disciplines",
+         "Progress review Wk 15 + punch list kick-off",
+         "Punch list for Zone B steel started. 42 items raised across 3 disciplines.",
+         "Target: punch list clear by 30-Apr. Daily close-out meetings to start 08-Apr.",
+         "AI-17", date(2026,4,14)),
+        ("M-08", date(2026,4,28), "Monthly Project Review", "Project Manager",
+         "All disciplines + Client Representative",
+         "Apr progress + commissioning readiness",
+         "Overall project 78% complete against 80% planned. CPI remains above 1.0.",
+         "Commissioning plan approved. Mechanical completion target confirmed: 15-May.",
+         "AI-08, AI-11", date(2026,5,12)),
+    ]
+
+    for r_idx, mtg in enumerate(meetings):
+        row = 4 + r_idx
+        fill_color = SURF if r_idx % 2 == 0 else WHITE
+        for c, val in enumerate(mtg, 1):
+            cell = ws.cell(row=row, column=c)
+            cell.value = val
+            cell.fill = F(fill_color)
+            cell.font = Fn(color=TEXT, size=9)
+            cell.border = thin_border()
+            cell.alignment = AL(h="left", wrap=True, indent=1)
+            if c == 2 or c == 10:
+                cell.number_format = "DD-MMM-YY"
+        ws.row_dimensions[row].height = 45
+
+    last_row = 4 + len(meetings) - 1
+
+    # ── Data validation ─────────────────────────────────────────────────────
+    dv_type = DataValidation(
+        type="list",
+        formula1='"Weekly Site Coordination,Monthly Project Review,Safety Meeting,Client Meeting,Commissioning Meeting"',
+        allow_blank=True, showDropDown=False,
+        showInputMessage=True, promptTitle="Meeting Type",
+        prompt="Select the type of coordination meeting"
+    )
+    ws.add_data_validation(dv_type)
+    dv_type.sqref = f"C4:C{last_row + 10}"
+
+    dv_date = DataValidation(
+        type="date", operator="greaterThan", formula1="DATE(2020,1,1)",
+        allow_blank=True,
+        showInputMessage=True, promptTitle="Meeting Date", prompt="Enter date: DD-MMM-YY"
+    )
+    ws.add_data_validation(dv_date)
+    dv_date.sqref = f"B4:B{last_row + 10}"
+
+    # ── Excel Table ──────────────────────────────────────────────────────────
+    tab = Table(displayName="tblMeetingLog", ref=f"A3:J{last_row}")
+    tab.tableStyleInfo = TableStyleInfo(
+        name="TableStyleLight1",
+        showFirstColumn=False, showLastColumn=False,
+        showRowStripes=False, showColumnStripes=False,
+    )
+    ws.add_table(tab)
+
+    set_widths(ws, {"A": 8, "B": 12, "C": 22, "D": 18,
+                    "E": 28, "F": 28, "G": 42, "H": 42,
+                    "I": 18, "J": 14})
+    ws.print_title_rows = "3:3"
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # ADVANCED EXCEL FEATURES
 # Excel Tables · Data Validation · Row Grouping · Hyperlinks · Cell Comments
 # ══════════════════════════════════════════════════════════════════════════════
@@ -1533,6 +2003,9 @@ def main():
     print("Building Monthly Report..."); build_monthly_report(wb)
     print("Building Data Validation Log..."); build_data_validation_log(wb)
     print("Building Instructions & Guide..."); build_instructions(wb)
+    print("Building Power BI Export..."); build_powerbi_export(wb)
+    print("Building Submission Tracker..."); build_submission_tracker(wb)
+    print("Building Meeting Log..."); build_meeting_log(wb)
 
     # Charts
     print("Adding charts...")
@@ -1555,8 +2028,11 @@ def main():
         "NCR Quality Tracker": DARK,
         "Monthly Report":      DARK,
         "Data Validation Log": DARK,
-        "Lookup Tables":       BODY,
-        "Instructions & Guide":BODY,
+        "Lookup Tables":        BODY,
+        "Instructions & Guide": BODY,
+        "Power BI Export":      ACC,
+        "Submission Tracker":   DARK,
+        "Meeting Log":          DARK,
     }
     for name, color in tab_map.items():
         if name in wb.sheetnames:
@@ -1565,7 +2041,8 @@ def main():
     # Sheet order
     order = ["DASHBOARD", "Weekly Progress", "Risk Register", "Action Item Log",
              "NCR Quality Tracker", "Monthly Report", "Data Validation Log",
-             "Lookup Tables", "Instructions & Guide"]
+             "Submission Tracker", "Meeting Log",
+             "Lookup Tables", "Power BI Export", "Instructions & Guide"]
     sheet_objects = {s.title: s for s in wb._sheets}
     wb._sheets = [sheet_objects[n] for n in order if n in sheet_objects]
     wb.active = wb["DASHBOARD"]

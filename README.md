@@ -18,7 +18,7 @@ It models real-world construction site workflows:
 
 ---
 
-## Workbook Structure — 9 Sheets
+## Workbook Structure — 12 Sheets
 
 | # | Sheet | Purpose |
 |---|-------|---------|
@@ -29,8 +29,11 @@ It models real-world construction site workflows:
 | 5 | **NCR Quality Tracker** | 12 NCRs — INDEX/MATCH for discipline lead, Days Open counter |
 | 6 | **Monthly Report** | 16 entries across 3 months — SUMIFS aggregation, SV%, CV%, CPI chart |
 | 7 | **Data Validation Log** | Audit trail of data quality issues found and resolved |
-| 8 | **Lookup Tables** | Master reference: disciplines, leads, risk matrix, status definitions |
-| 9 | **Instructions & Guide** | Step-by-step usage guide for each sheet |
+| 8 | **Submission Tracker** | Per-discipline weekly data submission status (Submitted / Pending) |
+| 9 | **Meeting Log** | Coordination meeting minutes, decisions, and action item links |
+| 10 | **Lookup Tables** | Master reference: disciplines, leads, risk matrix, status definitions |
+| 11 | **Power BI Export** | Flat denormalised table — import directly into Power BI via Get Data → Excel |
+| 12 | **Instructions & Guide** | Step-by-step usage guide for each sheet |
 
 ---
 
@@ -49,12 +52,22 @@ It models real-world construction site workflows:
 | `IF / IFERROR` | All sheets | Conditional logic and safe error handling |
 | `TODAY()` | Action Log, NCR Tracker | Live overdue and days-open counters |
 
-### Excel Tables (Native Filter & Sort)
-All 6 data sheets are wrapped in proper **Excel Table** objects:
+### Power BI Integration
+A dedicated **Power BI Export** sheet (`tblPowerBI_Export`) contains a single flat, denormalised table combining data from all three main trackers (Weekly Progress, Risk Register, Action Item Log) with consistent column names typed for direct import:
 
 ```
-tblWeeklyProgress   tblRiskRegister   tblActionLog
-tblNCRTracker       tblMonthlyReport  tblValidationLog
+Power BI Desktop → Home → Get Data → Excel Workbook → select file → check tblPowerBI_Export → Load
+```
+
+Suggested Power BI visuals: use `Source_Sheet` as a slicer, `Discipline` as bar-chart axis, `Status` and `Risk_Level` as legends, `Planned_Pct` / `Actual_Pct` as measures.
+
+### Excel Tables (Native Filter & Sort)
+All data sheets are wrapped in proper **Excel Table** objects:
+
+```
+tblWeeklyProgress   tblRiskRegister     tblActionLog
+tblNCRTracker       tblMonthlyReport    tblValidationLog
+tblSubmissionTracker  tblMeetingLog     tblPowerBI_Export
 ```
 
 Each table provides:
